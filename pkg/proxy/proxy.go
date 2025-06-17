@@ -25,6 +25,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	kubeinformercorev1 "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/kubernetes"
@@ -498,13 +499,15 @@ func (s *Proxy) addCluster(obj interface{}) {
 
 	if !reflect.DeepEqual(oldCluster, cluster) {
 		err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
-			c, err := s.clusterClient.ClusterV1alpha1().Clusters().Get(context.TODO(), cluster.Name, metav1.GetOptions{})
+			patchData, err := json.Marshal(map[string]interface{}{
+				"spec":   cluster.Spec,
+				"status": cluster.Status,
+			})
 			if err != nil {
 				return err
 			}
 
-			cluster.ResourceVersion = c.ResourceVersion
-			cluster, err = s.clusterClient.ClusterV1alpha1().Clusters().Update(context.TODO(), cluster, metav1.UpdateOptions{})
+			cluster, err = s.clusterClient.ClusterV1alpha1().Clusters().Patch(context.TODO(), cluster.Name, types.MergePatchType, patchData, metav1.PatchOptions{})
 			return err
 		})
 		if err != nil {
